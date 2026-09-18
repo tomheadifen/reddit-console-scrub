@@ -15,11 +15,22 @@
 //
 // Processes your OLDEST comments first. LIMIT caps how many get edited in
 // a single run (raise it once you're happy with the results on a few).
+//
+// GOOD PRACTICE: don't set DELETE = true on the same run as your first edit.
+// Bots that scrape and archive Reddit (Pushshift-likes, search engines,
+// random mirrors) capture comment content on their own schedule, and a
+// deleted comment is often still reconstructable from whatever the last
+// scrape saw. If you edit and delete in the same breath, a bot that scraped
+// the ORIGINAL text moments earlier still has it. Overwrite first with
+// DELETE = false, leave the gibberish up for a few months so scrapers have
+// time to (re-)crawl and capture the overwritten version, THEN come back
+// and run again with DELETE = true to remove them for good.
 
 (async function scrubComments() {
   const USERNAME = "your-username-here";
-  const DRY_RUN = true; // set to false to actually edit comments
-  const LIMIT = 5; // max number of comments to edit this run; set to 'Infinity' for a full run
+  const DRY_RUN = true; // set to false to actually make changes
+  const DELETE = false; // set to true to delete comments after editing them -- see the note above first
+  const LIMIT = 5; // max number of comments to process this run; set to 'Infinity' for a full run
   const MIN_DELAY_MS = 2500; // don't edit this too low otherwise reddit might block you for being a bot.
   const MAX_DELAY_MS = 5000;
 
@@ -51,6 +62,16 @@
     const input = document.querySelector('input[name="uh"]');
     if (input) return input.value;
     return null;
+  }
+
+  async function deleteComment(fullname) {
+    const res = await fetch("https://old.reddit.com/api/del", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ id: fullname, uh: modhash }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
   }
 
   const modhash = getModhash();
@@ -90,6 +111,7 @@
   console.log(`Collected ${allComments.length} comments total. Processing oldest first, up to LIMIT=${LIMIT}.`);
 
   let edited = 0;
+  let deleted = 0;
   let skipped = 0;
   let errors = 0;
 
@@ -108,7 +130,7 @@
     const newBody = gibberish();
 
     if (DRY_RUN) {
-      console.log(`WOULD EDIT: "${preview}..." -> "${newBody}" ${link}`);
+      console.log(`WOULD ${DELETE ? "EDIT + DELETE" : "EDIT"}: "${preview}..." -> "${newBody}" ${link}`);
       edited++;
       continue;
     }
@@ -130,9 +152,23 @@
       if (apiErrors && apiErrors.length > 0) {
         console.warn(`ERROR editing ${c.name}: ${JSON.stringify(apiErrors)} ${link}`);
         errors++;
-      } else {
-        console.log(`EDITED: "${preview}..." -> "${newBody}" ${link}`);
-        edited++;
+        await randomDelay();
+        continue;
+      }
+
+      console.log(`EDITED: "${preview}..." -> "${newBody}" ${link}`);
+      edited++;
+
+      if (DELETE) {
+        await randomDelay();
+        try {
+          await deleteComment(c.name);
+          console.log(`DELETED: ${c.name} ${link}`);
+          deleted++;
+        } catch (e) {
+          console.warn(`ERROR deleting ${c.name}: ${e} ${link}`);
+          errors++;
+        }
       }
     } catch (e) {
       console.warn(`ERROR editing ${c.name}: ${e} ${link}`);
@@ -142,6 +178,6 @@
     await randomDelay();
   }
 
-  console.log(`\nDone. Edited: ${edited}  Skipped (archived): ${skipped}  Errors: ${errors}`);
-  if (DRY_RUN) console.log("This was a DRY RUN -- nothing was changed. Set DRY_RUN = false to actually edit.");
+  console.log(`\nDone. Edited: ${edited}  Deleted: ${deleted}  Skipped (archived): ${skipped}  Errors: ${errors}`);
+  if (DRY_RUN) console.log("This was a DRY RUN -- nothing was changed. Set DRY_RUN = false to actually make changes.");
 })();
