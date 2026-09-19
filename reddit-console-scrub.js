@@ -69,11 +69,22 @@
     if (window.STOP_SCRUB) throw new StopRequested();
   }
 
+  // Logs Reddit's rate-limit headers (when present) so you can see how close
+  // to being throttled you are, without the script acting on them itself.
+  function logRateLimitHeaders(res, label) {
+    const used = res.headers.get("x-ratelimit-used");
+    const remaining = res.headers.get("x-ratelimit-remaining");
+    const reset = res.headers.get("x-ratelimit-reset");
+    if (used === null && remaining === null && reset === null) return;
+    console.log(`  [ratelimit] used=${used} remaining=${remaining} reset=${reset}s (${label})`);
+  }
+
   // Fetches and stops the whole run immediately on 429 -- no retrying, Reddit is
   // telling us to back off, so we bail out and let you decide what to do next.
   async function fetchChecked(url, options, label) {
     checkStop();
     const res = await fetch(url, options);
+    logRateLimitHeaders(res, label);
     if (res.status === 429) {
       const retryAfter = res.headers.get("retry-after");
       throw new RateLimited(

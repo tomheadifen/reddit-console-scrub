@@ -33,6 +33,10 @@ Every comment that's successfully processed is recorded in `localStorage`, keyed
 
 There's no retry logic. If Reddit responds with `429 Too Many Requests` on any request (listing, edit, or delete), the script stops immediately and logs why, instead of hammering an already-annoyed rate limiter. Progress up to that point is saved — raise `MIN_DELAY_MS`/`MAX_DELAY_MS` and re-run later; already-done comments are skipped automatically. `MIN_DELAY_MS`/`MAX_DELAY_MS` is the normal randomized pacing between comments meant to avoid triggering a 429 in the first place.
 
+When present, Reddit's `X-Ratelimit-Used`/`X-Ratelimit-Remaining`/`X-Ratelimit-Reset` response headers are logged after every request (`[ratelimit] used=... remaining=... reset=...s`) so you can see how close to being throttled you are. The script doesn't act on these itself (old.reddit's session-cookie endpoints aren't guaranteed to send them the way the official OAuth API does) — it's just visibility.
+
+Reddit's documented limit for the official OAuth API is 100 requests/minute per client, averaged over a 10-minute window — this script doesn't use that API (it rides your logged-in session instead), so that number doesn't directly apply, but it's a reasonable ballpark for what Reddit considers non-abusive. In practice `MIN_DELAY_MS`/`MAX_DELAY_MS` of `2500`/`5000` (roughly 12-24 requests/minute) started getting 429s after about 10 minutes of continuous running; `5000`/`10000` (roughly 6-12 requests/minute) is the current, more conservative default.
+
 ## Edit then delete
 
 Don't set `DELETE = true` on your first run. Bots that scrape and archive Reddit (search engines, mirrors, Pushshift-likes) capture comment content on their own schedule, and a deleted comment is often still reconstructable from whatever the last scrape saw before the delete. If you edit and delete in the same run, a bot that scraped the original text moments earlier still has it.
