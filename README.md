@@ -13,6 +13,7 @@ Reddit's official API now requires manual approval for new apps (small/personal 
    - `USERNAME` — your Reddit username
    - `DRY_RUN` — leave as `true` for the first run (logs what it *would* do, changes nothing)
    - `LIMIT` — max number of comments to process this run (set to `Infinity` for a full run)
+   - `DAYS_BACK` — only process comments from the last N days (e.g. `60` starts from 60 days ago and works forward to today); leave as `Infinity` for your whole history. Older comments aren't fetched or touched.
    - `DELETE` — leave as `false` at first; see **Edit then delete** below before turning this on
    - `OFFSET` — manually skip this many oldest comments before starting (usually leave at `0`, see **Resuming** below)
 5. Paste into the console and press Enter.
@@ -27,7 +28,7 @@ Type `window.STOP_SCRUB = true` into the console and press Enter. The script che
 Every comment that's successfully processed is recorded in `localStorage`, keyed to the username and whether `DELETE` is on. If the script stops for any reason — you hit `STOP_SCRUB`, the tab closes, Reddit rate-limits you — just paste the script in and run it again. Already-done comments are skipped automatically, so you never redo work.
 
 - Set `RESET_PROGRESS = true` for a single run if you deliberately want to reprocess everything (progress is tracked separately for edit-only runs vs. delete runs, so starting your later `DELETE = true` pass doesn't need this).
-- `OFFSET` is a manual alternative/supplement to the automatic tracking — each processed comment logs its position (`[#123]`), so you can note it down and resume by count instead (e.g. if you switch machines/browser profiles and lose the saved `localStorage` state).
+- `OFFSET` is a manual alternative/supplement to the automatic tracking — each processed comment logs its position (`[#123]`), so you can note it down and resume by count instead (e.g. if you switch machines/browser profiles and lose the saved `localStorage` state). Positions are counted within the `DAYS_BACK` window, and that window moves forward each day, so if you resume by `OFFSET` keep `DAYS_BACK` the same and expect the numbers to shift slightly.
 
 ## Rate limiting (429s)
 

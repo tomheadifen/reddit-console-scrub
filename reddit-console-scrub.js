@@ -17,6 +17,7 @@
   const DRY_RUN = true; // set to false to actually make changes
   const DELETE = false; // set to true to delete comments after editing them -- see the note above first
   const LIMIT = 5; // max number of comments to process this run; set to 'Infinity' for a full run
+  const DAYS_BACK = Infinity; // only process comments from the last N days, e.g. 60 = start from 60 days ago; 'Infinity' = all history
   const OFFSET = 0; // manually skip this many oldest comments before starting (see RESUMING note above)
   const RESET_PROGRESS = false; // set to true for one run to forget saved progress and reprocess everything
   const MIN_DELAY_MS = 5000; // don't edit this too low otherwise reddit might block you for being a bot.
@@ -141,9 +142,20 @@
     return;
   }
 
+  if (!(DAYS_BACK > 0)) {
+    console.error("DAYS_BACK must be a positive number of days (or Infinity for all history).");
+    return;
+  }
+  // Unix seconds; comments created before this are left alone. -Infinity when DAYS_BACK is Infinity.
+  const cutoffUtc = Date.now() / 1000 - DAYS_BACK * 86400;
+  const cutoffLabel = Number.isFinite(DAYS_BACK)
+    ? `from the last ${DAYS_BACK} days (since ${new Date(cutoffUtc * 1000).toLocaleString()})`
+    : "from your full history";
+
   // Reddit's listing only exposes newest-first pagination, so we collect
   // everything first, then walk it in reverse to process oldest-first.
-  console.log("Collecting your full comment history (this only reads, doesn't change anything)...");
+  // Because it's newest-first, we can stop paging once we pass the DAYS_BACK cutoff.
+  console.log(`Collecting your comments ${cutoffLabel} (this only reads, doesn't change anything)...`);
   const allComments = [];
   let after = null;
   let page = 1;
@@ -163,7 +175,9 @@
       console.log(`  fetched page ${page}: ${items.length} comments`);
       if (items.length === 0) break;
 
-      allComments.push(...items.map((item) => item.data));
+      const inRange = items.map((item) => item.data).filter((c) => c.created_utc >= cutoffUtc);
+      allComments.push(...inRange);
+      if (inRange.length < items.length) break; // reached comments older than DAYS_BACK; no need to page further
 
       after = json.data.after;
       if (!after) break;
@@ -182,7 +196,7 @@
 
   const done = loadProgress();
   console.log(
-    `Collected ${allComments.length} comments total (${done.size} already done in a previous run). ` +
+    `Collected ${allComments.length} comments ${cutoffLabel} (${done.size} already done in a previous run). ` +
       `Processing oldest first, skipping the first OFFSET=${OFFSET}, up to LIMIT=${LIMIT}.`
   );
 
